@@ -13,11 +13,20 @@ type Audit = {
   createdAt: string;
 };
 
-type SessionUser = { id: string; email: string; planTier: string };
+type RankCheckRecord = {
+  id: string;
+  videoId: string;
+  trackedKeyword: string;
+  checkedAt: string;
+  result: string;
+};
+
+type SessionUser = { id: string; email: string; planTier: string; isOwner?: boolean };
 
 type SessionResponse = {
   user: SessionUser | null;
   audits?: Audit[];
+  rankChecks?: RankCheckRecord[];
   limits?: {
     auditsUsed: number;
     auditLimit: number | null;
@@ -52,6 +61,16 @@ export default function Dashboard() {
   const [keywordResult, setKeywordResult] = useState<{
     suggestions: string[];
     note: string;
+  } | null>(null);
+
+  const [rankVideoUrl, setRankVideoUrl] = useState("");
+  const [rankKeyword, setRankKeyword] = useState("");
+  const [rankLoading, setRankLoading] = useState(false);
+  const [rankError, setRankError] = useState<string | null>(null);
+  const [rankResult, setRankResult] = useState<{
+    position: number | null;
+    checkedResults: number;
+    trackedKeyword: string;
   } | null>(null);
 
   useEffect(() => {
@@ -120,6 +139,31 @@ export default function Dashboard() {
       setKeywordError("Couldn't reach the server. Try again.");
     } finally {
       setKeywordLoading(false);
+    }
+  }
+
+  async function runRankCheck(e: React.FormEvent) {
+    e.preventDefault();
+    setRankLoading(true);
+    setRankError(null);
+    setRankResult(null);
+    try {
+      const res = await fetch("/api/rank-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl: rankVideoUrl, trackedKeyword: rankKeyword })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRankError(data.error ?? "Something went wrong.");
+        return;
+      }
+      setRankResult(data);
+      refreshSession();
+    } catch {
+      setRankError("Couldn't reach the server. Try again.");
+    } finally {
+      setRankLoading(false);
     }
   }
 
@@ -307,14 +351,75 @@ export default function Dashboard() {
       )}
 
       {tab === "rank" && (
-        <section className="card locked">
+        <section className="card">
           <h2>Rank tracking</h2>
-          <p>
-            Connect your channel and automatically track how your videos rank for your target
-            keywords over time.
+          <p className="check-detail" style={{ marginBottom: 20 }}>
+            Checks where a video actually ranks in YouTube&apos;s own search results for a keyword,
+            right now — not an estimate.
           </p>
+
           {isPro ? (
-            <p className="check-detail">Coming soon for Pro accounts — we&apos;ll notify you by email.</p>
+            <>
+              <form onSubmit={runRankCheck} className="audit-form">
+                <label>
+                  YouTube video URL
+                  <input
+                    type="text"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={rankVideoUrl}
+                    onChange={(e) => setRankVideoUrl(e.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Keyword to check rank for
+                  <input
+                    type="text"
+                    placeholder="e.g. affiliate marketing for beginners"
+                    value={rankKeyword}
+                    onChange={(e) => setRankKeyword(e.target.value)}
+                    required
+                  />
+                </label>
+                <button type="submit" disabled={rankLoading}>
+                  {rankLoading ? "Checking rank..." : "Check rank now"}
+                </button>
+              </form>
+              {rankError && <p className="error">{rankError}</p>}
+              {rankResult && (
+                <div className="results">
+                  {rankResult.position ? (
+                    <p className="score">
+                      Ranked <strong>#{rankResult.position}</strong> out of{" "}
+                      {rankResult.checkedResults} results checked for &quot;{rankResult.trackedKeyword}&quot;
+                    </p>
+                  ) : (
+                    <p className="score">
+                      Not found in the top {rankResult.checkedResults} results for &quot;
+                      {rankResult.trackedKeyword}&quot;
+                    </p>
+                  )}
+                </div>
+              )}
+              {session.rankChecks && session.rankChecks.length > 0 && (
+                <div className="history">
+                  <h3>Past rank checks</h3>
+                  <ul className="history-list">
+                    {session.rankChecks.map((r) => {
+                      const parsed = JSON.parse(r.result) as { position: number | null; checkedResults: number };
+                      return (
+                        <li key={r.id}>
+                          <span className="history-title">{r.trackedKeyword}</span>
+                          <span className="history-score">
+                            {parsed.position ? `#${parsed.position}` : "not found"}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </>
           ) : (
             <button className="upgrade-btn" onClick={upgrade}>
               Upgrade to Pro to unlock

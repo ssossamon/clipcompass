@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { extractVideoId, fetchVideoDetails, computeChecklist } from "@/lib/youtube";
-import { createSessionToken, getOrCreateUserByEmail, SESSION_COOKIE } from "@/lib/auth";
+import { createSessionToken, getOrCreateUserByEmail, isOwnerEmail, SESSION_COOKIE } from "@/lib/auth";
 import { FREE_AUDIT_LIMIT_PER_MONTH, daysAgo } from "@/lib/limits";
 
 export async function POST(req: NextRequest) {
@@ -29,8 +29,9 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await getOrCreateUserByEmail(email.toLowerCase().trim());
+    const hasFullAccess = user.planTier !== "free" || isOwnerEmail(user.email);
 
-    if (user.planTier === "free") {
+    if (!hasFullAccess) {
       const recentCount = await prisma.videoAudit.count({
         where: { userId: user.id, createdAt: { gte: daysAgo(30) } }
       });

@@ -5,6 +5,18 @@ import { prisma } from "./db";
 export const SESSION_COOKIE = "cc_session";
 const SESSION_DAYS = 30;
 
+// OWNER OVERRIDE — accounts on this list always get full Pro access, regardless of
+// what's stored in planTier, so Scott can test and demo every feature without hitting
+// his own paywall. This must NOT ship as-is if ClipCompass itself is ever sold/distributed
+// as a white-label product to other marketers — before that, delete this allowlist or
+// move it to a build-time/env-based mechanism so buyers can't grant themselves free access
+// the same way.
+const OWNER_EMAILS = ["reinvestclubjax@gmail.com"];
+
+export function isOwnerEmail(email: string) {
+  return OWNER_EMAILS.includes(email.toLowerCase().trim());
+}
+
 function getSecret() {
   return process.env.SESSION_SECRET || "dev-insecure-secret-change-me";
 }

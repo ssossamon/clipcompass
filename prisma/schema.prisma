@@ -1,0 +1,72 @@
+datasource db {
+provider = "sqlite"
+url      = env("DATABASE_URL")
+}
+
+generator client {
+provider = "prisma-client-js"
+}
+
+model User {
+id           String   @id @default(cuid())
+email        String   @unique
+name         String?
+role         String   @default("free")
+planTier     String   @default("free")
+createdAt    DateTime @default(now())
+audits       VideoAudit[]
+keywordRuns  KeywordSearch[]
+favorites    FavoriteItem[]
+rankChecks   RankCheck[]
+}
+
+model Lead {
+id            String   @id @default(cuid())
+email         String
+source        String   @default("free_audit_landing_page")
+consented     Boolean  @default(false)
+videoAuditId  String?
+capturedAt    DateTime @default(now())
+}
+
+model VideoAudit {
+id                String   @id @default(cuid())
+userId            String?
+user              User?    @relation(fields: [userId], references: [id])
+videoUrl          String
+videoId           String
+title             String
+optimizationScore Int
+checklist         String
+tagsVisible       Boolean
+dataSource        String   @default("youtube_data_api_v3")
+createdAt         DateTime @default(now())
+}
+
+model KeywordSearch {
+id          String   @id @default(cuid())
+userId      String?
+user        User?    @relation(fields: [userId], references: [id])
+seedKeyword String
+suggestions String
+createdAt   DateTime @default(now())
+}
+
+model FavoriteItem {
+id        String   @id @default(cuid())
+userId    String
+user      User     @relation(fields: [userId], references: [id])
+itemType  String
+refValue  String
+savedAt   DateTime @default(now())
+}
+
+model RankCheck {
+id             String   @id @default(cuid())
+userId         String
+user           User     @relation(fields: [userId], references: [id])
+videoId        String
+trackedKeyword String
+checkedAt      DateTime @default(now())
+result         String
+}

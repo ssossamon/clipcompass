@@ -1,31 +1,20 @@
 "use client";
 
 import { useState } from "react";
-
-type ChecklistResult = { check: string; passed: boolean; detail: string };
-
-type AuditResponse = {
-  auditId: string;
-  title: string;
-  score: number;
-  checklist: ChecklistResult[];
-  viewCount: number;
-  likeCount: number;
-};
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   const [videoUrl, setVideoUrl] = useState("");
   const [targetKeyword, setTargetKeyword] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AuditResponse | null>(null);
 
   async function runAudit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setResult(null);
 
     try {
       const res = await fetch("/api/audit", {
@@ -37,13 +26,13 @@ export default function Home() {
 
       if (!res.ok) {
         setError(data.error ?? "Something went wrong running that audit.");
+        setLoading(false);
         return;
       }
 
-      setResult(data);
+      router.push("/dashboard");
     } catch {
       setError("Couldn't reach the server. Try again in a moment.");
-    } finally {
       setLoading(false);
     }
   }
@@ -54,7 +43,7 @@ export default function Home() {
         <h1>ClipCompass</h1>
         <p className="tagline">
           A free, instant SEO audit for any YouTube video — pulled straight from YouTube&apos;s own
-          API, no guesswork.
+          API, no guesswork. Enter your email to unlock your results and your free dashboard.
         </p>
       </section>
 
@@ -80,7 +69,7 @@ export default function Home() {
             />
           </label>
           <label>
-            Email (to save your results)
+            Email (unlocks your results + dashboard)
             <input
               type="email"
               placeholder="you@email.com"
@@ -95,29 +84,6 @@ export default function Home() {
         </form>
         {error && <p className="error">{error}</p>}
       </section>
-
-      {result && (
-        <section className="card results">
-          <h2>{result.title}</h2>
-          <p className="score">
-            Optimization score: <strong>{result.score}/100</strong>
-          </p>
-          <ul className="checklist">
-            {result.checklist.map((item) => (
-              <li key={item.check} className={item.passed ? "pass" : "fail"}>
-                <span className="icon">{item.passed ? "✓" : "✗"}</span>
-                <div>
-                  <p className="check-label">{item.check}</p>
-                  {item.detail && <p className="check-detail">{item.detail}</p>}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="stats">
-            {result.viewCount.toLocaleString()} views · {result.likeCount.toLocaleString()} likes
-          </p>
-        </section>
-      )}
     </main>
   );
 }

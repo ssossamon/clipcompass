@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { fetchKeywordSuggestions } from "@/lib/youtube";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isOwnerEmail } from "@/lib/auth";
 import { FREE_KEYWORD_LIMIT_PER_MONTH, daysAgo } from "@/lib/limits";
 
 export async function POST(req: NextRequest) {
@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "seedKeyword is required." }, { status: 400 });
     }
 
-    if (user.planTier === "free") {
+    const hasFullAccess = user.planTier !== "free" || isOwnerEmail(user.email);
+
+    if (!hasFullAccess) {
       const recentCount = await prisma.keywordSearch.count({
         where: { userId: user.id, createdAt: { gte: daysAgo(30) } }
       });

@@ -121,3 +121,35 @@ export async function fetchKeywordSuggestions(seed: string): Promise<string[]> {
   const data = await res.json();
   return Array.isArray(data?.[1]) ? data[1] : [];
 }
+
+export type RankCheckResult = {
+  position: number | null;
+  checkedResults: number;
+};
+
+// Real call to search.list - finds where a video actually ranks in YouTube's own
+// search results for a keyword. Note: search.list costs 100 quota units per call
+// (vs. 1 for videos.list), so this is intentionally a manual, on-demand check
+// rather than an automatic background poller, to stay within YouTube's free daily
+// quota (10,000 units/day = ~100 rank checks/day across the whole app).
+export async function checkVideoRank(videoId: string, keyword: string): Promise<RankCheckResult> {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    throw new Error("YOUTUBE_API_KEY is not set - add it to .env before running audits.");
+  }
+
+  const maxResults = 50;
+  const url = `${API_BASE}/search?part=snippet&type=video&order=relevance&maxResults=${maxResults}&q=${encodeURIComponent(keyword)}&key=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`YouTube API error (${res.status}): ${await res.text()}`);
+  }
+  const data = await res.json();
+  const items: { id?: { videoId?: string } }[] = data.items ?? [];
+  const index = items.findIndex((item) => item.id?.videoId === videoId);
+
+  return {
+    position: index === -1 ? null : index + 1,
+    checkedResults: items.length
+  };
+}

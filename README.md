@@ -70,3 +70,5 @@ prisma/
 
 See `.env.example` for the full list and where to get each key. Only `YOUTUBE_API_KEY` and
 `DATABASE_URL` are required to run the MVP.
+
+<!-- redeploy trigger -->

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { extractVideoId, fetchVideoDetails, computeChecklist } from "@/lib/youtube";
+import { createSessionToken, getOrCreateUserByEmail, SESSION_COOKIE } from "@/lib/auth";
+import { FREE_AUDIT_LIMIT_PER_MONTH, daysAgo } from "@/lib/limits";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,6 +16,9 @@ export async function POST(req: NextRequest) {
     if (!videoUrl || typeof videoUrl !== "string") {
       return NextResponse.json({ error: "videoUrl is required." }, { status: 400 });
     }
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      return NextResponse.json({ error: "A valid email is required to run an audit." }, { status: 400 });
+    }
 
     const videoId = extractVideoId(videoUrl);
     if (!videoId) {
@@ -21,6 +26,23 @@ export async function POST(req: NextRequest) {
         { error: "Couldn't find a valid YouTube video ID in that URL." },
         { status: 400 }
       );
+    }
+
+    const user = await getOrCreateUserByEmail(email.toLowerCase().trim());
+
+    if (user.planTier === "free") {
+      const recentCount = await prisma.videoAudit.count({
+        where: { userId: user.id, createdAt: { gte: daysAgo(30) } }
+      });
+      if (recentCount >= FREE_AUDIT_LIMIT_PER_MONTH) {
+        return NextResponse.json(
+          {
+            error: `Free plan is limited to ${FREE_AUDIT_LIMIT_PER_MONTH} audits per month. Upgrade to run more.`,
+            limitReached: true
+          },
+          { status: 402 }
+        );
+      }
     }
 
     const video = await fetchVideoDetails(videoId);
@@ -35,6 +57,7 @@ export async function POST(req: NextRequest) {
 
     const audit = await prisma.videoAudit.create({
       data: {
+        userId: user.id,
         videoUrl,
         videoId: video.id,
         title: video.title,
@@ -44,18 +67,16 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    if (email && typeof email === "string" && email.includes("@")) {
-      await prisma.lead.create({
-        data: {
-          email,
-          source: "free_audit_landing_page",
-          consented: true,
-          videoAuditId: audit.id
-        }
-      });
-    }
+    await prisma.lead.create({
+      data: {
+        email: user.email,
+        source: "free_audit_landing_page",
+        consented: true,
+        videoAuditId: audit.id
+      }
+    });
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       auditId: audit.id,
       title: video.title,
       score,
@@ -63,6 +84,16 @@ export async function POST(req: NextRequest) {
       viewCount: video.viewCount,
       likeCount: video.likeCount
     });
+
+    res.cookies.set(SESSION_COOKIE, createSessionToken(user.id, user.email), {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30
+    });
+
+    return res;
   } catch (err) {
     console.error(err);
     const message = err instanceof Error ? err.message : "Something went wrong running that audit.";

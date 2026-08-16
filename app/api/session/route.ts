@@ -11,10 +11,15 @@ export async function GET() {
 
   const hasFullAccess = user.planTier !== "free" || isOwnerEmail(user.email);
 
-  const [audits, auditsThisMonth, keywordsThisMonth] = await Promise.all([
+  const [audits, rankChecks, auditsThisMonth, keywordsThisMonth] = await Promise.all([
     prisma.videoAudit.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.rankCheck.findMany({
+      where: { userId: user.id },
+      orderBy: { checkedAt: "desc" },
       take: 20
     }),
     prisma.videoAudit.count({ where: { userId: user.id, createdAt: { gte: daysAgo(30) } } }),
@@ -29,6 +34,7 @@ export async function GET() {
       isOwner: isOwnerEmail(user.email)
     },
     audits,
+    rankChecks,
     limits: {
       auditsUsed: auditsThisMonth,
       auditLimit: hasFullAccess ? null : FREE_AUDIT_LIMIT_PER_MONTH,

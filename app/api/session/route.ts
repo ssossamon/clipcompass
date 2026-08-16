@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isOwnerEmail } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { FREE_AUDIT_LIMIT_PER_MONTH, FREE_KEYWORD_LIMIT_PER_MONTH, daysAgo } from "@/lib/limits";
 
@@ -8,6 +8,8 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ user: null });
   }
+
+  const hasFullAccess = user.planTier !== "free" || isOwnerEmail(user.email);
 
   const [audits, auditsThisMonth, keywordsThisMonth] = await Promise.all([
     prisma.videoAudit.findMany({
@@ -20,13 +22,18 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-    user: { id: user.id, email: user.email, planTier: user.planTier },
+    user: {
+      id: user.id,
+      email: user.email,
+      planTier: hasFullAccess ? "pro" : user.planTier,
+      isOwner: isOwnerEmail(user.email)
+    },
     audits,
     limits: {
       auditsUsed: auditsThisMonth,
-      auditLimit: user.planTier === "free" ? FREE_AUDIT_LIMIT_PER_MONTH : null,
+      auditLimit: hasFullAccess ? null : FREE_AUDIT_LIMIT_PER_MONTH,
       keywordsUsed: keywordsThisMonth,
-      keywordLimit: user.planTier === "free" ? FREE_KEYWORD_LIMIT_PER_MONTH : null
+      keywordLimit: hasFullAccess ? null : FREE_KEYWORD_LIMIT_PER_MONTH
     }
   });
 }
